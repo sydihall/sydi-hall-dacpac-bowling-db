@@ -1,0 +1,59 @@
+# CIT-326 - Infrastructure as a code 2 – using CI-CD pipelines for deployments
+# Azure PIPELINE - DACPAC file - MS-SQL Deployment
+# Faculty: David Miller version: 1
+###################################################
+trigger:
+- main
+pool:
+ name: Local-Windows
+stages:
+- stage: Build
+ displayName: 'CI Stage - Copy Files from GitHub'
+ pool: Local-Windows
+ jobs:
+ - job: 'Copyfiles'
+ steps:
+ - task: CopyFiles@2
+ displayName: 'Copy Files from GitHub to Pipeline staging folder'
+ inputs:
+ SourceFolder: '$(system.defaultworkingdirectory)'
+ Contents: '**\$(dacpac-file-name)'
+ TargetFolder: '$(build.artifactstagingdirectory)'
+ condition: succeededOrFailed()
+ - task: PublishBuildArtifacts@1
+ displayName: 'Publish Artifact: drop'
+ inputs:
+ PathtoPublish: '$(build.artifactstagingdirectory)'
+ condition: succeededOrFailed()
+- stage: CD
+ displayName: 'CD stage - Deploy dacpac files'
+ jobs: 
+ - deployment: VMDeploy
+ displayName: mssql1
+ environment:
+ name: Local-Windows-SQL
+ resourceType: VirtualMachine
+ tags: winsql
+ strategy:
+ runOnce:
+ deploy:
+ steps:
+ - download: none
+ - task: DownloadBuildArtifacts@0
+ displayName: 'Download Artifact File'
+ inputs:
+ buildType: current
+ downloadType: single
+ downloadPath: $(System.DefaultWorkingDirectory)
+ artifactName: 'drop'
+ - task: SqlDacpacDeploymentOnMachineGroup@0
+ displayName: 'Deploy using dacpac file'
+ inputs:
+ tasktype: 'dacpac'
+ DacpacFile: '$(System.DefaultWorkingDirectory)/drop/$(dacpacfile-name)'
+ TargetMethod: 'server'
+ ServerName: 'localhost'
+ DatabaseName: '$(sql-db-name)'
+ AuthScheme: sqlServerAuthentication
+ SqlUsername: '$(sql-db-login)'
+ SqlPassword: '$(sql-db-password)'
